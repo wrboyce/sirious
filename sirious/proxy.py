@@ -98,8 +98,6 @@ class SiriProxyClient(SiriProxy):
         self.ref_id = plist['refId']
         data = writePlistToString(plist)
         data_len = len(data)
-        from pprint import pprint
-        pprint(plist)
         if data_len > 0:
             header = '{:x}'.format(0x0200000000 + data_len).rjust(10, '0')
             data = self.zlib_c.compress(unhexlify(header) + data)
