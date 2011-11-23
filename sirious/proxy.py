@@ -27,6 +27,7 @@ class SiriProxy(LineReceiver):
 class SiriProxyClient(SiriProxy):
     raw_header = False
     blocking = False
+    ref_id = None
 
     def __init__(self):
         self.buffer = ""
@@ -57,6 +58,7 @@ class SiriProxyClient(SiriProxy):
             body = udata[5:(size + 5)]
             if body:
                 plist = readPlistFromString(body)
+                self.ref_id = plist.get('refId', None)
                 plist = self.process_plist(plist)
                 if plist:
                     if not self.blocking:
