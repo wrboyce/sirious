@@ -2,8 +2,7 @@ from sirious import SiriObjects
 
 
 class SiriousTest(object):
-    def __init__(self, proxy):
-        self.proxy = proxy
+    proxy = None
 
     def process_plist(self, plist):
         return plist

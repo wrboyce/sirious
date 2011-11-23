@@ -121,8 +121,10 @@ class SiriProxyClientFactory(ProxyClientFactory):
 
     def buildProtocol(self, *args, **kwargs):
         proto = ProxyClientFactory.buildProtocol(self, *args, **kwargs)
-        for cls in self.plugins:
-            proto.plugins.append(cls(proto))
+        for cls, plugin_kwargs in self.plugins:
+            instance = cls(**plugin_kwargs)
+            instance.proxy = proto
+            proto.plugins.append(instance)
         return proto
 
 
@@ -150,11 +152,10 @@ class SiriProxyFactory(protocol.Factory):
         self.host = '17.174.4.4'
         self.port = 443
         self.plugins = []
-        for mod_name in plugins:
+        for mod_name, cls_name, kwargs in plugins:
             __import__(mod_name)
             mod = sys.modules[mod_name]
-            cls_name = mod_name.split('.')[-1].replace('_', ' ').title().replace(' ', '')
-            self.plugins.append(getattr(mod, cls_name))
+            self.plugins.append((getattr(mod, cls_name), kwargs))
 
     def buildProtocol(self, addr):
         protocol = self.protocol(self.plugins)
