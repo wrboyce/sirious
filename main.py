@@ -29,6 +29,7 @@ class SiriProxyClient(SiriProxy):
 
     def __init__(self):
         self.buffer = ""
+        self.plugins = []
         self.zlib_d = zlib.decompressobj()
         self.zlib_c = zlib.compressobj()
 
@@ -86,24 +87,42 @@ class SiriProxyClient(SiriProxy):
             self.peer.transport.write(self.zlib_c.flush(zlib.Z_FULL_FLUSH))
 
     def process_unknown_intent(self, phrase, plist):
-        ## TODO: plugins
+        for plugin in self.plugins:
+            new_plist = plugin.unknown_intent(phrase, plist)
+            if new_plist:
+                return new_plist
         return plist
 
     def process_known_intent(self, phrase, plist):
-        ## TODO: plugins
+        for plugin in self.plugins:
+            new_plist = plugin.known_intent(phrase, plist)
+            if new_plist:
+                return new_plist
         return plist
 
 
 class SiriProxyClientFactory(ProxyClientFactory):
     protocol = SiriProxyClient
 
+    def __init__(self, plugins):
+        self.plugins = plugins
+
+    def buildProtocol(self, *args, **kwargs):
+        proto = ProxyClientFactory.buildProtocol(self, *args, **kwargs)
+        for cls in self.plugins:
+            proto.plugins.append(cls())
+        return proto
+
 
 class SiriProxyServer(SiriProxy):
     clientProtocolFactory = SiriProxyClientFactory
 
+    def __init__(self, plugins):
+        self.plugins = plugins
+
     def connectionMade(self):
         self.transport.pauseProducing()
-        client = self.clientProtocolFactory()
+        client = self.clientProtocolFactory(self.plugins)
         client.setServer(self)
         reactor.connectSSL(self.factory.host, self.factory.port, client, ssl.DefaultOpenSSLContextFactory(
             'keys/server.key', 'keys/server.crt'))
@@ -115,12 +134,26 @@ class SiriProxyServer(SiriProxy):
 class SiriProxyFactory(protocol.Factory):
     protocol = SiriProxyServer
 
-    def __init__(self):
+    def __init__(self, plugins):
         self.host = '17.174.4.4'
         self.port = 443
+        self.plugins = []
+        for mod_name in plugins:
+            mod = __import__(mod_name)
+            cls_name = mod_name.replace('_', ' ').title().replace(' ', '')
+            self.plugins.append(getattr(mod, cls_name))
+
+    def buildProtocol(self, addr):
+        protocol = self.protocol(self.plugins)
+        protocol.factory = self
+        return protocol
 
 
 if __name__ == '__main__':
-    reactor.listenSSL(443, SiriProxyFactory(), ssl.DefaultOpenSSLContextFactory(
+    import ConfigParser
+    config = ConfigParser.RawConfigParser()
+    config.read('sirious.cfg')
+    plugins = [plugin for (plugin, state) in config.items('plugins') if state == 'enabled']
+    reactor.listenSSL(443, SiriProxyFactory(plugins), ssl.DefaultOpenSSLContextFactory(
         'keys/server.key', 'keys/server.crt'))
     reactor.run()
