@@ -50,7 +50,7 @@ class SiriProxyClient(SiriProxy):
             header = hexlify(udata[0:5])
             if header[1] in [3, 4]:
                 ## Ping/Pong packets - pass them straight through
-                return self.transport.write(data)
+                return self.peer.transport.write(data)
             size = int(header[2:], 16)
             body = udata[5:(size + 5)]
             if body:
