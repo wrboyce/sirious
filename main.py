@@ -10,6 +10,9 @@ from twisted.protocols.portforward import ProxyClientFactory
 class SiriProxy(LineReceiver):
     peer = None
 
+    def setPeer(self, peer):
+        self.peer = peer
+
     def lineReceived(self, line):
         self.peer.sendLine(line)
         if not line:
@@ -18,7 +21,7 @@ class SiriProxy(LineReceiver):
     def connectionLost(self, reason):
         if self.peer:
             self.peer.transport.loseConnection()
-            self.peer = None
+            self.setPeer(None)
 
 
 class SiriProxyClient(SiriProxy):
@@ -30,7 +33,7 @@ class SiriProxyClient(SiriProxy):
         self.zlib_c = zlib.compressobj()
 
     def connectionMade(self):
-        self.peer.peer = self
+        self.peer.setPeer(self)
         self.peer.transport.resumeProducing()
 
     def rawDataReceived(self, data):
@@ -76,7 +79,7 @@ class SiriProxyClient(SiriProxy):
         data = writePlistToString(plist)
         data_len = len(data)
         if data_len > 0:
-            header = hex(0x0200000000 + int(hex(data_len), 16)).split('x')[1].rjust(10, '0')
+            header = '{:x}'.format(0x0200000000 + data_len).rjust(10, '0')
             data = self.zlib_c.compress(unhexlify(header) + data)
             #data += self.zlib_c.flush(zlib.Z_FULL_FLUSH)
             self.peer.transport.write(data)
