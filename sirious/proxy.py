@@ -59,9 +59,11 @@ class SiriProxyClient(SiriProxy):
             body = udata[5:(size + 5)]
             if body:
                 plist = readPlistFromString(body)
-                self.ref_id = plist.get('refId', None)
                 plist = self.process_plist(plist)
                 if plist:
+                    if self.blocking:
+                        if self.ref_id != plist['refId']:
+                            self.blocking = False
                     if not self.blocking:
                         self.inject_plist(plist)
                     self.process_speech(plist)
@@ -93,6 +95,7 @@ class SiriProxyClient(SiriProxy):
             self.process_known_intent(phrase, plist)
 
     def inject_plist(self, plist):
+        self.ref_id = plist['refId']
         data = writePlistToString(plist)
         data_len = len(data)
         from pprint import pprint
