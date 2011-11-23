@@ -102,7 +102,7 @@ class SiriProxyServer(SiriProxy):
         self.transport.pauseProducing()
         client = self.clientProtocolFactory()
         client.setServer(self)
-        reactor.connectSSL('17.174.4.4', self.factory.port, client, ssl.DefaultOpenSSLContextFactory(
+        reactor.connectSSL(self.factory.host, self.factory.port, client, ssl.DefaultOpenSSLContextFactory(
             'keys/server.key', 'keys/server.crt'))
 
     def rawDataReceived(self, data):
@@ -112,7 +112,7 @@ class SiriProxyFactory(protocol.Factory):
     protocol = SiriProxyServer
 
     def __init__(self):
-        self.host = '17.174.4.44'
+        self.host = '17.174.4.4'
         self.port = 443
 
 
