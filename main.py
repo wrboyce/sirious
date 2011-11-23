@@ -10,9 +10,6 @@ from twisted.protocols.portforward import ProxyClientFactory
 class SiriProxy(LineReceiver):
     peer = None
 
-    def setPeer(self, peer):
-        self.peer = peer
-
     def lineReceived(self, line):
         self.peer.sendLine(line)
         if not line:
@@ -21,7 +18,8 @@ class SiriProxy(LineReceiver):
     def connectionLost(self, reason):
         if self.peer:
             self.peer.transport.loseConnection()
-            self.setPeer(None)
+            self.peer = None
+
 
 class SiriProxyClient(SiriProxy):
     raw_header = False
@@ -32,7 +30,7 @@ class SiriProxyClient(SiriProxy):
         self.zlib_c = zlib.compressobj()
 
     def connectionMade(self):
-        self.peer.setPeer(self)
+        self.peer.peer = self
         self.peer.transport.resumeProducing()
 
     def rawDataReceived(self, data):
@@ -47,11 +45,11 @@ class SiriProxyClient(SiriProxy):
         if udata:
             ## If we get decompressed output, process it
             header = hexlify(udata[0:5])
-            if header[1] in [3,4]:
+            if header[1] in [3, 4]:
                 ## Ping/Pong packets - pass them straight through
                 return self.transport.write(data)
             size = int(header[2:], 16)
-            body = udata[5:size+5]
+            body = udata[5:(size + 5)]
             if body:
                 plist = readPlistFromString(body)
                 plist = self.process_plist(plist)
@@ -92,8 +90,10 @@ class SiriProxyClient(SiriProxy):
         ## TODO: plugins
         return plist
 
+
 class SiriProxyClientFactory(ProxyClientFactory):
     protocol = SiriProxyClient
+
 
 class SiriProxyServer(SiriProxy):
     clientProtocolFactory = SiriProxyClientFactory
@@ -107,6 +107,7 @@ class SiriProxyServer(SiriProxy):
 
     def rawDataReceived(self, data):
         self.peer.transport.write(data)
+
 
 class SiriProxyFactory(protocol.Factory):
     protocol = SiriProxyServer
