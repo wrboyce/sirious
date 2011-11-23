@@ -1,4 +1,5 @@
 from binascii import hexlify, unhexlify
+import sys
 import zlib
 
 from biplist import readPlistFromString, writePlistToString
@@ -150,8 +151,9 @@ class SiriProxyFactory(protocol.Factory):
         self.port = 443
         self.plugins = []
         for mod_name in plugins:
-            mod = __import__(mod_name)
-            cls_name = mod_name.replace('_', ' ').title().replace(' ', '')
+            __import__(mod_name)
+            mod = sys.modules[mod_name]
+            cls_name = mod_name.split('.')[-1].replace('_', ' ').title().replace(' ', '')
             self.plugins.append(getattr(mod, cls_name))
 
     def buildProtocol(self, addr):
