@@ -61,9 +61,8 @@ class SiriProxyClient(SiriProxy):
                 plist = readPlistFromString(body)
                 plist = self.process_plist(plist)
                 if plist:
-                    if self.blocking:
-                        if self.ref_id != plist['refId']:
-                            self.blocking = False
+                    if self.blocking and self.ref_id != plist['refId']:
+                        self.blocking = False
                     if not self.blocking:
                         self.inject_plist(plist)
                     self.process_speech(plist)
