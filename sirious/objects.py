@@ -1,3 +1,4 @@
+from copy import copy
 import uuid
 
 
@@ -21,13 +22,11 @@ class SiriObject(object):
     group = "com.apple.ace.assistant"
 
     def __init__(self, **kwargs):
-        self.ref_id = None
-        self.ace_id = None
-        self.properties = {}
-        for key, val in kwargs.iteritems():
-            if key in self._properties:
-                val = [] if val == [] else val
-                self.properties[key] = val
+        self.ref_id = kwargs.get('ref_id', None)
+        self.ace_id = kwargs.get('ace_id', None)
+        for key in self._properties:
+            val = kwargs.get(key, copy(getattr(self.__class__, key)))
+            setattr(self, key, val)
 
     def to_dict(self):
         d = {
@@ -68,17 +67,22 @@ class SiriObject(object):
 class SiriObjects(object):
     class AddViews(SiriObject):
         cls = "AddViews"
-        scroll_to_top = False
+        scrollToTop = False
         temporary = False
-        dialog_phase = "Completion"
+        dialogPhase = "Completion"
         views = []
 
     class Utterance(SiriObject):
         cls = "AssistantUtteranceView"
         text = ""
-        speakable_text = ""
-        dialog_identifier = "Misc#ident"
-        listen_after_speaking = False
+        speakableText = ""
+        dialogIdentifier = "Misc#ident"
+        listenAfterSpeaking = False
+
+        def __init__(self, *args, **kwargs):
+            super(SiriObjects.Utterance, self).__init__(*args, **kwargs)
+            if not self.speakableText:
+                self.speakableText = self.text
 
     class Map(SiriObject):
         cls = "MapItemSnippet"
@@ -99,11 +103,3 @@ class SiriObjects(object):
     class RequestCompleted(SiriObject):
         cls = "RequestCompleted"
         group = "com.apple.ace.system"
-
-
-if __name__ == '__main__':
-    root = SiriObjects.AddViews()
-    root.make_root()
-    root.views.append(SiriObjects.Utterance(text='Hello, World'))
-    from pprint import pprint
-    pprint(root.to_dict())

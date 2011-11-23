@@ -26,6 +26,7 @@ class SiriProxy(LineReceiver):
 
 class SiriProxyClient(SiriProxy):
     raw_header = False
+    blocking = False
 
     def __init__(self):
         self.buffer = ""
@@ -57,15 +58,28 @@ class SiriProxyClient(SiriProxy):
             if body:
                 plist = readPlistFromString(body)
                 plist = self.process_plist(plist)
-                self.inject_plist(plist)
+                if plist:
+                    if not self.blocking:
+                        self.inject_plist(plist)
+                    self.process_speech(plist)
 
     def process_plist(self, plist):
-        phrase = ''
+        ## Offer plugins a chance to intercept plists
+        for plugin in self.plugins:
+            plist = plugin.process_plist(plist)
+            ## If a plugin returns None, the plist has been blocked
+            if not plist:
+                return
+        return plist
+
+    def process_speech(self, plist):
         if plist['class'] == 'AddViews':
+            phrase = ''
             if plist['properties']['views'][0]['properties']['dialogIdentifier'] == 'Common#unknownIntent':
                 phrase = plist['properties']['views'][1]['properties']['commands'][0]['properties']['commands'][0]['properties']['utterance'].split('^')[3]
-                return self.process_unknown_intent(phrase, plist)
+                self.process_unknown_intent(phrase, plist)
         if plist['class'] == 'SpeechRecognized':
+            phrase = ''
             for phrase_plistect in plist['properties']['recognition']['properties']['phrases']:
                 for token in phrase_plistect['properties']['interpretations'][0]['properties']['tokens']:
                     if token['properties']['removeSpaceBefore']:
@@ -73,12 +87,13 @@ class SiriProxyClient(SiriProxy):
                     phrase += token['properties']['text']
                     if not token['properties']['removeSpaceAfter']:
                         phrase += ' '
-            return self.process_known_intent(phrase, plist)
-        return plist
+            self.process_known_intent(phrase, plist)
 
     def inject_plist(self, plist):
         data = writePlistToString(plist)
         data_len = len(data)
+        from pprint import pprint
+        pprint(plist)
         if data_len > 0:
             header = '{:x}'.format(0x0200000000 + data_len).rjust(10, '0')
             data = self.zlib_c.compress(unhexlify(header) + data)
@@ -88,17 +103,11 @@ class SiriProxyClient(SiriProxy):
 
     def process_unknown_intent(self, phrase, plist):
         for plugin in self.plugins:
-            new_plist = plugin.unknown_intent(phrase, plist)
-            if new_plist:
-                return new_plist
-        return plist
+            plugin.unknown_intent(phrase, plist)
 
     def process_known_intent(self, phrase, plist):
         for plugin in self.plugins:
-            new_plist = plugin.known_intent(phrase, plist)
-            if new_plist:
-                return new_plist
-        return plist
+            plugin.known_intent(phrase, plist)
 
 
 class SiriProxyClientFactory(ProxyClientFactory):
@@ -110,7 +119,7 @@ class SiriProxyClientFactory(ProxyClientFactory):
     def buildProtocol(self, *args, **kwargs):
         proto = ProxyClientFactory.buildProtocol(self, *args, **kwargs)
         for cls in self.plugins:
-            proto.plugins.append(cls())
+            proto.plugins.append(cls(proto))
         return proto
 
 
