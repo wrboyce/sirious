@@ -4,6 +4,7 @@ import sys
 import zlib
 
 from biplist import readPlistFromString, writePlistToString
+from pydispatch import dispatcher
 from twisted.internet import protocol, reactor, ssl
 from twisted.protocols.basic import LineReceiver
 from twisted.protocols.portforward import ProxyClientFactory
@@ -50,14 +51,26 @@ class SiriProxy(LineReceiver):
                 plist = readPlistFromString(body)
                 plist = self.process_plist(plist)
                 if plist:
+                    block = False
                     if self.blocking and self.ref_id != plist['refId']:
                         self.blocking = False
-                    if not self.blocking:
+                    if isinstance(self.blocking, bool) and self.blocking:
+                        block = True
+                    if isinstance(self.blocking, int) and self.blocking > 0:
+                        self.blocking -= 1
+                        block = True
+                    if not block:
                         self.inject_plist(plist)
-                        pass
+                    else:
+                        print "!", plist['class'], self.blocking
                     return plist
 
     def process_plist(self, plist):
+        direction = '>' if self.__class__ == SiriProxyServer else '<'
+        print direction, plist['class'], plist.get('refId', None)
+        #from pprint import pprint
+        #pprint(plist)
+        #print
         ## Offer plugins a chance to intercept plists
         for plugin in self.plugins:
             plugin.proxy = self
@@ -106,18 +119,22 @@ class SiriProxyClient(SiriProxy):
                 phrase = plist['properties']['views'][1]['properties']['commands'][0]['properties']['commands'][0]['properties']['utterance'].split('^')[3]
         if plist['class'] == 'SpeechRecognized':
             phrase = ''
-            for phrase_plistect in plist['properties']['recognition']['properties']['phrases']:
-                for token in phrase_plistect['properties']['interpretations'][0]['properties']['tokens']:
+            for phrase_plist in plist['properties']['recognition']['properties']['phrases']:
+                for token in phrase_plist['properties']['interpretations'][0]['properties']['tokens']:
                     if token['properties']['removeSpaceBefore']:
                         phrase = phrase[:-1]
                     phrase += token['properties']['text']
                     if not token['properties']['removeSpaceAfter']:
                         phrase += ' '
         if phrase:
-            #print '[Speech Recognised] %s' % phrase
-            for trigger, function in self.triggers:
-                if trigger.search(phrase):
-                    function(phrase, plist)
+            #print '[Speech Recognised (%s)] %s' % (plist['class'], phrase)
+            try:
+                dispatcher.getAllReceivers(signal='consume_phrase').next()
+                dispatcher.send('consume_phrase', phrase=phrase, plist=plist)
+            except StopIteration:
+                for trigger, function in self.triggers:
+                    if trigger.search(phrase):
+                        function(phrase, plist)
 
 
 class SiriProxyClientFactory(ProxyClientFactory):
