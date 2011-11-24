@@ -125,14 +125,6 @@ class SiriProxyClient(SiriProxy):
 class SiriProxyClientFactory(ProxyClientFactory):
     protocol = SiriProxyClient
 
-    def buildProtocol2(self, *args, **kwargs):
-        proto = ProxyClientFactory.buildProtocol(self, *args, **kwargs)
-        for cls, plugin_kwargs in self.plugins:
-            instance = cls(**plugin_kwargs)
-            instance.proxy = proto
-            proto.plugins.append(instance)
-        return proto
-
 
 class SiriProxyServer(SiriProxy):
     clientProtocolFactory = SiriProxyClientFactory
@@ -147,10 +139,6 @@ class SiriProxyServer(SiriProxy):
 
     def rawDataReceived(self, data):
         SiriProxy.rawDataReceived(self, data) ## returning a value seems to upset Twisted
-
-    def xrawDataReceived(self, data):
-        ## BUG - for some reason unwrapping the data from phone->server breaks it
-        self.peer.transport.write(data)
 
 
 class SiriProxyFactory(protocol.Factory):
