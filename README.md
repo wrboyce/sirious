@@ -37,3 +37,9 @@ Once this is done, you'll need to redirect the DNS for guzzoni.apple.com to wher
 Finally, fire up sirious:
 
     $ sudo python main.py
+
+
+## Acknowledgements
+
+* Applidium, without who I wouldn't have really known where to start with the Siri Protocol
+* plamoni/SiriProxy, sometimes it's nice to have a reference even in a language you don't speak :)
