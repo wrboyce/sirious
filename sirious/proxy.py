@@ -10,6 +10,14 @@ from twisted.protocols.portforward import ProxyClientFactory
 
 class SiriProxy(LineReceiver):
     peer = None
+    blocking = False
+    ref_id = None
+
+    def __init__(self, plugins=[]):
+        self.buffer = ""
+        self.zlib_d = zlib.decompressobj()
+        self.zlib_c = zlib.compressobj()
+        self.plugins = plugins
 
     def setPeer(self, peer):
         self.peer = peer
@@ -19,34 +27,12 @@ class SiriProxy(LineReceiver):
         if not line:
             self.setRawMode()
 
-    def connectionLost(self, reason):
-        if self.peer:
-            self.peer.transport.loseConnection()
-            self.setPeer(None)
-
-
-class SiriProxyClient(SiriProxy):
-    raw_header = False
-    blocking = False
-    ref_id = None
-
-    def __init__(self):
-        self.buffer = ""
-        self.plugins = []
-        self.zlib_d = zlib.decompressobj()
-        self.zlib_c = zlib.compressobj()
-
-    def connectionMade(self):
-        self.peer.setPeer(self)
-        self.peer.transport.resumeProducing()
-
     def rawDataReceived(self, data):
         if self.zlib_d.unconsumed_tail:
             data = self.zlib_d.unconsumed_tail + data
-        if not self.raw_header:
+        if hexlify(data[0:4]) == 'aaccee02':
             self.peer.transport.write(data[0:4])
             data = data[4:]
-            self.raw_header = True
         ## Add `data` to decompress stream
         udata = self.zlib_d.decompress(data)
         if udata:
@@ -55,6 +41,7 @@ class SiriProxyClient(SiriProxy):
             if header[1] in [3, 4]:
                 ## Ping/Pong packets - pass them straight through
                 return self.peer.transport.write(data)
+                pass
             size = int(header[2:], 16)
             body = udata[5:(size + 5)]
             if body:
@@ -65,16 +52,49 @@ class SiriProxyClient(SiriProxy):
                         self.blocking = False
                     if not self.blocking:
                         self.inject_plist(plist)
-                    self.process_speech(plist)
+                        pass
+                    return plist
 
     def process_plist(self, plist):
         ## Offer plugins a chance to intercept plists
         for plugin in self.plugins:
-            plist = plugin.process_plist(plist)
+            plugin.proxy = self
+            if self.__class__ == SiriProxyServer:
+                plist = plugin.plist_from_client(plist)
+            if self.__class__ == SiriProxyClient:
+                plist = plugin.plist_from_server(plist)
             ## If a plugin returns None, the plist has been blocked
             if not plist:
                 return
         return plist
+
+    def inject_plist(self, plist):
+        ref_id = plist.get('refId', None)
+        if ref_id:
+            self.ref_id = ref_id
+        data = writePlistToString(plist)
+        data_len = len(data)
+        if data_len > 0:
+            header = '{:x}'.format(0x0200000000 + data_len).rjust(10, '0')
+            data = self.zlib_c.compress(unhexlify(header) + data)
+            self.peer.transport.write(data)
+            self.peer.transport.write(self.zlib_c.flush(zlib.Z_FULL_FLUSH))
+
+    def connectionLost(self, reason):
+        if self.peer:
+            self.peer.transport.loseConnection()
+            self.setPeer(None)
+
+
+class SiriProxyClient(SiriProxy):
+    def connectionMade(self):
+        self.peer.setPeer(self)
+        self.peer.transport.resumeProducing()
+
+    def rawDataReceived(self, data):
+        plist = SiriProxy.rawDataReceived(self, data)
+        if plist:
+            self.process_speech(plist)
 
     def process_speech(self, plist):
         if plist['class'] == 'AddViews':
@@ -93,17 +113,6 @@ class SiriProxyClient(SiriProxy):
                         phrase += ' '
             self.process_known_intent(phrase, plist)
 
-    def inject_plist(self, plist):
-        self.ref_id = plist['refId']
-        data = writePlistToString(plist)
-        data_len = len(data)
-        if data_len > 0:
-            header = '{:x}'.format(0x0200000000 + data_len).rjust(10, '0')
-            data = self.zlib_c.compress(unhexlify(header) + data)
-            #data += self.zlib_c.flush(zlib.Z_FULL_FLUSH)
-            self.peer.transport.write(data)
-            self.peer.transport.write(self.zlib_c.flush(zlib.Z_FULL_FLUSH))
-
     def process_unknown_intent(self, phrase, plist):
         for plugin in self.plugins:
             plugin.unknown_intent(phrase, plist)
@@ -116,10 +125,7 @@ class SiriProxyClient(SiriProxy):
 class SiriProxyClientFactory(ProxyClientFactory):
     protocol = SiriProxyClient
 
-    def __init__(self, plugins):
-        self.plugins = plugins
-
-    def buildProtocol(self, *args, **kwargs):
+    def buildProtocol2(self, *args, **kwargs):
         proto = ProxyClientFactory.buildProtocol(self, *args, **kwargs)
         for cls, plugin_kwargs in self.plugins:
             instance = cls(**plugin_kwargs)
@@ -131,17 +137,19 @@ class SiriProxyClientFactory(ProxyClientFactory):
 class SiriProxyServer(SiriProxy):
     clientProtocolFactory = SiriProxyClientFactory
 
-    def __init__(self, plugins):
-        self.plugins = plugins
-
     def connectionMade(self):
         self.transport.pauseProducing()
-        client = self.clientProtocolFactory(self.plugins)
+        client = self.clientProtocolFactory()
         client.setServer(self)
+        client.plugins = self.plugins
         reactor.connectSSL(self.factory.host, self.factory.port, client, ssl.DefaultOpenSSLContextFactory(
             'keys/server.key', 'keys/server.crt'))
 
     def rawDataReceived(self, data):
+        SiriProxy.rawDataReceived(self, data) ## returning a value seems to upset Twisted
+
+    def xrawDataReceived(self, data):
+        ## BUG - for some reason unwrapping the data from phone->server breaks it
         self.peer.transport.write(data)
 
 
@@ -158,6 +166,9 @@ class SiriProxyFactory(protocol.Factory):
             self.plugins.append((getattr(mod, cls_name), kwargs))
 
     def buildProtocol(self, addr):
-        protocol = self.protocol(self.plugins)
+        protocol = self.protocol()
         protocol.factory = self
+        for cls, plugin_kwargs in self.plugins:
+            instance = cls(**plugin_kwargs)
+            protocol.plugins.append(instance)
         return protocol
