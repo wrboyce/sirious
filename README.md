@@ -43,3 +43,4 @@ Finally, fire up sirious:
 
 * Applidium, without who I wouldn't have really known where to start with the Siri Protocol
 * plamoni/SiriProxy, sometimes it's nice to have a reference even in a language you don't speak :)
+* chendo, for some (albeit Rubyist) Plugin API inspiration
