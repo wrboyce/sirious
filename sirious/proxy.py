@@ -1,4 +1,5 @@
 from binascii import hexlify, unhexlify
+import re
 import sys
 import zlib
 
@@ -13,11 +14,12 @@ class SiriProxy(LineReceiver):
     blocking = False
     ref_id = None
 
-    def __init__(self, plugins=[]):
+    def __init__(self, plugins=[], triggers=[]):
         self.buffer = ""
         self.zlib_d = zlib.decompressobj()
         self.zlib_c = zlib.compressobj()
         self.plugins = plugins
+        self.triggers = triggers
 
     def setPeer(self, peer):
         self.peer = peer
@@ -97,11 +99,11 @@ class SiriProxyClient(SiriProxy):
             self.process_speech(plist)
 
     def process_speech(self, plist):
+        phrase = None
         if plist['class'] == 'AddViews':
             phrase = ''
             if plist['properties']['views'][0]['properties']['dialogIdentifier'] == 'Common#unknownIntent':
                 phrase = plist['properties']['views'][1]['properties']['commands'][0]['properties']['commands'][0]['properties']['utterance'].split('^')[3]
-                self.process_unknown_intent(phrase, plist)
         if plist['class'] == 'SpeechRecognized':
             phrase = ''
             for phrase_plistect in plist['properties']['recognition']['properties']['phrases']:
@@ -111,15 +113,11 @@ class SiriProxyClient(SiriProxy):
                     phrase += token['properties']['text']
                     if not token['properties']['removeSpaceAfter']:
                         phrase += ' '
-            self.process_known_intent(phrase, plist)
-
-    def process_unknown_intent(self, phrase, plist):
-        for plugin in self.plugins:
-            plugin.unknown_intent(phrase, plist)
-
-    def process_known_intent(self, phrase, plist):
-        for plugin in self.plugins:
-            plugin.known_intent(phrase, plist)
+        if phrase:
+            #print '[Speech Recognised] %s' % phrase
+            for trigger, function in self.triggers:
+                if trigger.search(phrase):
+                    function(phrase, plist)
 
 
 class SiriProxyClientFactory(ProxyClientFactory):
@@ -134,6 +132,7 @@ class SiriProxyServer(SiriProxy):
         client = self.clientProtocolFactory()
         client.setServer(self)
         client.plugins = self.plugins
+        client.triggers = self.triggers
         reactor.connectSSL(self.factory.host, self.factory.port, client, ssl.DefaultOpenSSLContextFactory(
             'keys/server.key', 'keys/server.crt'))
 
@@ -153,10 +152,20 @@ class SiriProxyFactory(protocol.Factory):
             mod = sys.modules[mod_name]
             self.plugins.append((getattr(mod, cls_name), kwargs))
 
+    def _get_plugin_triggers(self, instance):
+        for attr_name in dir(instance):
+            attr = getattr(instance, attr_name)
+            if callable(attr) and hasattr(attr, 'triggers'):
+                yield attr
+
     def buildProtocol(self, addr):
         protocol = self.protocol()
-        protocol.factory = self
         for cls, plugin_kwargs in self.plugins:
             instance = cls(**plugin_kwargs)
             protocol.plugins.append(instance)
+            for function in self._get_plugin_triggers(instance):
+                for trigger in function.triggers:
+                    trigger_re = re.compile(trigger, re.I)
+                    protocol.triggers.append((trigger_re, function))
+        protocol.factory = self
         return protocol
