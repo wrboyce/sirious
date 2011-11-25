@@ -147,8 +147,13 @@ class SiriProxy(LineReceiver):
                 dispatcher.send('consume_phrase', phrase=phrase, plist=plist)
             except StopIteration:
                 for trigger, function in self.triggers:
-                    if trigger.search(phrase):
-                        function(phrase, plist)
+                    match = trigger.search(phrase)
+                    if match:
+                        groups = match.groups()
+                        args = [phrase, plist]
+                        if groups:
+                            args.append(groups)
+                        function(*args)
 
     def connectionLost(self, reason):
         """ Reset ref_id and disconnect peer """
