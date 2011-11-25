@@ -81,20 +81,16 @@ class SiriProxy(LineReceiver):
                 print direction, plist['class'], plist.get('refId', '')
                 plist = self.process_plist(plist)
                 if plist:
-                    block = False
                     ## Stop blocking if it's a new session
                     if self.blocking and self.ref_id != plist['refId']:
                         self.blocking = False
-                    if isinstance(self.blocking, bool) and self.blocking:
-                        block = True
-                    if isinstance(self.blocking, int) and self.blocking > 0:
-                        self.blocking -= 1
-                        block = True
-                    if not block:
+                    ## Never block transcription packets, they're too useful
+                    if not self.blocking or plist['class'] == 'SpeechRecognized':
                         self.inject_plist(plist)
                     else:
-                        print "!", plist['class'], self.blocking
-                    return plist
+                        print "!", plist['class'], plist.get('refId', '')
+                    if plist['class'] == 'SpeechRecognized':
+                        self.process_speech(plist)
                 else:
                     print "!", plist['class'], plist.get('refId', '')
 
@@ -135,6 +131,25 @@ class SiriProxy(LineReceiver):
             self.peer.transport.write(data)
             self.peer.transport.write(self.zlib_c.flush(zlib.Z_FULL_FLUSH))
 
+    def process_speech(self, plist):
+        phrase = ''
+        for phrase_plist in plist['properties']['recognition']['properties']['phrases']:
+            for token in phrase_plist['properties']['interpretations'][0]['properties']['tokens']:
+                if token['properties']['removeSpaceBefore']:
+                    phrase = phrase[:-1]
+                phrase += token['properties']['text']
+                if not token['properties']['removeSpaceAfter']:
+                    phrase += ' '
+        if phrase:
+            print '[Speech Recognised (%s)] "%s"' % (plist['class'], phrase)
+            try:
+                dispatcher.getAllReceivers(signal='consume_phrase').next()
+                dispatcher.send('consume_phrase', phrase=phrase, plist=plist)
+            except StopIteration:
+                for trigger, function in self.triggers:
+                    if trigger.search(phrase):
+                        function(phrase, plist)
+
     def connectionLost(self, reason):
         """ Reset ref_id and disconnect peer """
         self.ref_id = None
@@ -147,36 +162,6 @@ class SiriProxyClient(SiriProxy):
     def connectionMade(self):
         self.peer.setPeer(self)
         self.peer.transport.resumeProducing()
-
-    def rawDataReceived(self, data):
-        plist = SiriProxy.rawDataReceived(self, data)
-        if plist:
-            self.process_speech(plist)
-
-    def process_speech(self, plist):
-        phrase = None
-        if plist['class'] == 'AddViews':
-            phrase = ''
-            if plist['properties']['views'][0]['properties']['dialogIdentifier'] == 'Common#unknownIntent':
-                phrase = plist['properties']['views'][1]['properties']['commands'][0]['properties']['commands'][0]['properties']['utterance'].split('^')[3]
-        if plist['class'] == 'SpeechRecognized':
-            phrase = ''
-            for phrase_plist in plist['properties']['recognition']['properties']['phrases']:
-                for token in phrase_plist['properties']['interpretations'][0]['properties']['tokens']:
-                    if token['properties']['removeSpaceBefore']:
-                        phrase = phrase[:-1]
-                    phrase += token['properties']['text']
-                    if not token['properties']['removeSpaceAfter']:
-                        phrase += ' '
-        if phrase:
-            print '[Speech Recognised (%s)] "%s"' % (plist['class'], phrase)
-            try:
-                dispatcher.getAllReceivers(signal='consume_phrase').next()
-                dispatcher.send('consume_phrase', phrase=phrase, plist=plist)
-            except StopIteration:
-                for trigger, function in self.triggers:
-                    if trigger.search(phrase):
-                        function(phrase, plist)
 
 
 class SiriProxyClientFactory(ProxyClientFactory):
@@ -194,9 +179,6 @@ class SiriProxyServer(SiriProxy):
         client.triggers = self.triggers
         reactor.connectSSL(self.factory.host, self.factory.port, client, ssl.DefaultOpenSSLContextFactory(
             'keys/server.key', 'keys/server.crt'))
-
-    def rawDataReceived(self, data):
-        SiriProxy.rawDataReceived(self, data) ## returning a value seems to upset Twisted
 
 
 class SiriProxyFactory(protocol.Factory):

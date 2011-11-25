@@ -15,11 +15,8 @@ class SiriPlugin(object):
 
     def ask(self, handler, text, speakableText=None, dialogueIdentifier='Misc#ident'):
         self.respond(text, speakableText, dialogueIdentifier, listenAfterSpeaking=True)
-        self.proxy.blocking = 1
+        self.proxy.blocking = True
         def handle_answer(*a, **kw):
-            ## if the question caused unknown intent, we'll get told about it twice
-            if kw['plist']['class'] == 'AddViews':
-                return
             del(kw['sender'])
             del(kw['signal'])
             handler(*a, **kw)
