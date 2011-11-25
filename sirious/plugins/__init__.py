@@ -24,6 +24,11 @@ class SiriPlugin(object):
             dispatcher.disconnect(handle_answer, signal='consume_phrase')
         dispatcher.connect(handle_answer, signal='consume_phrase')
 
+    def complete(self):
+        request_complete = SiriObjects.RequestCompleted()
+        request_complete.make_root(self.proxy.ref_id)
+        self.proxy.inject_plist(request_complete.to_dict())
+
     def plist_from_server(self, plist):
         return plist
 
