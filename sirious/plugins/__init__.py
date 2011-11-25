@@ -13,13 +13,14 @@ class SiriPlugin(object):
         root.views.append(SiriObjects.Utterance(text=text, speakableText=speakableText, dialogueIdentifier=dialogueIdentifier, listenAfterSpeaking=listenAfterSpeaking))
         self.proxy.inject_plist(root.to_dict())
 
-    def ask(self, handler, text, speakableText=None, dialogueIdentifier='Misc#ident'):
+    def ask(self, handler, text, speakableText=None, dialogueIdentifier='Misc#ident', handler_kwargs={}):
         self.respond(text, speakableText, dialogueIdentifier, listenAfterSpeaking=True)
         self.proxy.blocking = True
         def handle_answer(*a, **kw):
             del(kw['sender'])
             del(kw['signal'])
-            handler(*a, **kw)
+            handler_kwargs.update(kw)
+            handler(*a, **handler_kwargs)
             dispatcher.disconnect(handle_answer, signal='consume_phrase')
         dispatcher.connect(handle_answer, signal='consume_phrase')
 
