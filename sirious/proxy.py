@@ -12,15 +12,15 @@ from twisted.protocols.portforward import ProxyClientFactory
 
 class SiriProxy(LineReceiver):
     """ Base class for the SiriProxy - performs the majority of the siri protocol and sirious plugin handling. """
-    peer = None ## the other end! (self.peer.peer == self)
+    peer = None  # the other end! (self.peer.peer == self)
     blocking = False
-    ref_id = None ## last refId seen
+    ref_id = None  # last refId seen
 
     def __init__(self, plugins=[], triggers=[]):
         self.zlib_d = zlib.decompressobj()
         self.zlib_c = zlib.compressobj()
-        self.plugins = plugins ## registered plugins
-        self.triggers = triggers ## two-tuple mapping regex->plugin_function
+        self.plugins = plugins  # registered plugins
+        self.triggers = triggers  # two-tuple mapping regex->plugin_function
 
     def setPeer(self, peer):
         self.peer = peer
