@@ -81,7 +81,7 @@ class SiriObjects(object):
 
         def __init__(self, *args, **kwargs):
             super(SiriObjects.Utterance, self).__init__(*args, **kwargs)
-            if not self.speakableText:
+            if self.speakableText is None:
                 self.speakableText = self.text
 
     class Map(SiriObject):
