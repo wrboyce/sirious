@@ -1,2 +1,4 @@
 *.pyc
-keys/
+Sirious.egg-info/
+build/
+dist/
