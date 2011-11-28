@@ -19,10 +19,9 @@ class SiriProxy(LineReceiver):
     blocking = False
     ref_id = None  # last refId seen
 
-    def __init__(self, root, plugins=[], triggers=[]):
+    def __init__(self, plugins=[], triggers=[]):
         self.zlib_d = zlib.decompressobj()
         self.zlib_c = zlib.compressobj()
-        self.root = root
         self.plugins = plugins  # registered plugins
         self.triggers = triggers  # two-tuple mapping regex->plugin_function
         self.logger = logging.getLogger('sirious.%s' % self.__class__.__name__)
@@ -178,6 +177,7 @@ class SiriProxyClientFactory(ProxyClientFactory):
 
 
 class SiriProxyServer(SiriProxy):
+    root = None
     _lines = 0
     _serve_ca = False
     clientProtocolFactory = SiriProxyClientFactory
@@ -188,9 +188,7 @@ class SiriProxyServer(SiriProxy):
         client.setServer(self)
         client.plugins = self.plugins
         client.triggers = self.triggers
-        reactor.connectSSL(self.factory.host, self.factory.port, client, ssl.DefaultOpenSSLContextFactory(
-            os.path.join(self.root, 'ssl', 'server.key'),
-            os.path.join(self.root, 'ssl', 'server.crt')))
+        reactor.connectSSL(self.factory.host, self.factory.port, client, ssl.ClientContextFactory())
 
     def lineReceived(self, line):
         self._lines += 1
@@ -236,6 +234,7 @@ class SiriProxyFactory(protocol.Factory):
 
     def buildProtocol(self, addr):
         protocol = self.protocol()
+        protocol.root = self.root
         for cls, plugin_kwargs in self.plugins:
             instance = cls(**plugin_kwargs)
             protocol.plugins.append(instance)
