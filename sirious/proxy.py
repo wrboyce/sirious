@@ -174,6 +174,8 @@ class SiriProxyClientFactory(ProxyClientFactory):
 
 
 class SiriProxyServer(SiriProxy):
+    _lines = 0
+    _serve_ca = False
     clientProtocolFactory = SiriProxyClientFactory
 
     def connectionMade(self):
@@ -184,6 +186,28 @@ class SiriProxyServer(SiriProxy):
         client.triggers = self.triggers
         reactor.connectSSL(self.factory.host, self.factory.port, client, ssl.DefaultOpenSSLContextFactory(
             'keys/server.key', 'keys/server.crt'))
+
+    def lineReceived(self, line):
+        self._lines += 1
+        if self._lines == 1:
+            method, path, _ver = line.split(' ')
+            if method.lower() == 'get':
+                self._serve_ca = True
+        if self._serve_ca and not line:
+            crt = file('keys/ca.pem', 'rb').read()
+            headers = {
+                'Content-Type': 'application/x-pem-file',
+                'Content-Length': len(crt),
+                'Content-Disposition': 'attachment; filename=sirious-ca.pem',
+                'Server': 'Sirious',
+                'Connection': 'Close'
+            }
+            self.transport.write("HTTP/1.0 200 OK\r\n")
+            headers_str = "\r\n".join('%s: %s' % (key, val) for key, val in headers.iteritems())
+            self.transport.write("%s\r\n\r\n" % headers_str)
+            self.transport.write(crt)
+        if not self._serve_ca:
+            return SiriProxy.lineReceived(self, line)
 
 
 class SiriProxyFactory(protocol.Factory):
