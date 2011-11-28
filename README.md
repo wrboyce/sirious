@@ -17,26 +17,20 @@ Not really, but feel free to drop by #sirious on freenode.
 The Plugin API should be pretty stable now, until I discover more stuff in the Siri Protocol we can abuse. Take a look at sirious.plugins.sirious_test for a pretty clear example
 
 
-## Usage
+## Installation/Usage
 
-First you'll need to install the biplist Python module:
+Install using the usual method:
 
-    $ pip install biplist
+    $ python setup install.py
 
-Due to the way Siri works, you'll need to install a Custom CA onto your iPhone. There is a included script that will do most of the legwork for you, just run:
+Then you will need to run sirious-gencerts to generate your certificates for you. The location of these will be automatically calculated based on how you run/install Sirious.
+It will be either:
 
-    $ ./gen_certs.zsh
+    ${VIRTUAL_ENV}/.sirious/
+    ~/.sirious/
 
-It'll prompt you for some input, the correct answers are "1234", "1234", "y" and "y".
-
-Once this is done there will be keys/ca.pem - you need to get this file installed on your iPhone, email is probably the easiest.
-During installation iOS will give you a pretty scary (and rightfully so) warning, you can safely ignore it.
-
-Once this is done, you'll need to redirect the DNS for guzzoni.apple.com to wherever you are running sirious. I'd recommend using dnsmasq for this.
-
-Finally, fire up sirious:
-
-    $ sudo python main.py
+Inside an `ssl` subdir.
+If you wish to load plugins, or pass any configuration options, your config file should by `sirious.cfg` in the above directory. A sample config is provided with the package.
 
 
 ## Acknowledgements
