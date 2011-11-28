@@ -23,7 +23,7 @@ Install using the usual method:
 
     $ python setup install.py
 
-Then you will need to run sirious-gencerts to generate your certificates for you. The location of these will be automatically calculated based on how you run/install Sirious.
+Then you will need to run `sirious-gencerts` to generate your certificates for you. The location of these will be automatically calculated based on how you run/install Sirious.
 It will be either:
 
     ${VIRTUAL_ENV}/.sirious/
@@ -31,6 +31,14 @@ It will be either:
 
 Inside an `ssl` subdir.
 If you wish to load plugins, or pass any configuration options, your config file should by `sirious.cfg` in the above directory. A sample config is provided with the package.
+
+Once this is done, you can run sirious simply by typing its name!
+
+    $ sirious
+
+You will now need to "poison" your DNS to point `guzzoni.apple.com` at your Sirious server. This is outside the scope of this readme, but I suggest dnsmasq.
+
+Once this is done, navigate to https://guzzoni.apple.com on your iPhone, if the DNS changes were sucessful you should be offered the CA Certificate generated earlier. Accept/install this certificate and you can start using Siri via Sirious!
 
 
 ## Acknowledgements
