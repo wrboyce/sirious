@@ -9,7 +9,7 @@ setup(name='Sirious',
         description='Tampering Siri Proxy',
         license="BSD",
         url='https://github.com/wrboyce/sirious',
-        install_requires=['biplist', 'pydispatcher', 'twisted'],
+        install_requires=['biplist', 'pydispatcher', 'pyopenssl', 'twisted'],
         packages=['sirious', 'sirious.plugins'],
         package_data={
             'sirious': ['scripts/gen_certs.zsh'],
