@@ -10,4 +10,12 @@ setup(name='Sirious',
         license="BSD",
         url='https://github.com/wrboyce/sirious',
         install_requires=['biplist', 'pydispatcher', 'twisted'],
-        packages=['sirious', 'sirious.plugins'])
+        packages=['sirious', 'sirious.plugins'],
+        package_data={
+            'sirious': ['scripts/gen_certs.zsh'],
+        },
+        entry_points={
+            'console_scripts': [
+                'sirious = sirious.scripts:start_proxy',
+                'sirious-gencerts = sirious.scripts:gen_certs']
+        })

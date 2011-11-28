@@ -12,7 +12,7 @@ emailAddress=""
 
 ## Do not edit below here!
 
-mkdir keys
+mkdir -p ssl
 mkdir -p demoCA/{certs,crl,newcerts,private}
 touch demoCA/index.txt
 echo 01 > demoCA/crtnumber
@@ -27,6 +27,6 @@ openssl ca -policy policy_anything -out newcert.pem -infiles newreq.pem
 openssl rsa -in newkey.pem -out server.key -passin pass:1234
 
 mv newcert.pem server.crt
-mv demoCA/cacert.pem keys/ca.pem
-mv server.{crt,key} keys/
+mv demoCA/cacert.pem ssl/ca.pem
+mv server.{crt,key} ssl/
 rm -rf new{key,req}.pem demoCA
