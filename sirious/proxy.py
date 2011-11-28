@@ -1,5 +1,6 @@
 from binascii import hexlify, unhexlify
 import logging
+import os
 import pprint
 import re
 import sys
@@ -18,9 +19,10 @@ class SiriProxy(LineReceiver):
     blocking = False
     ref_id = None  # last refId seen
 
-    def __init__(self, plugins=[], triggers=[]):
+    def __init__(self, root, plugins=[], triggers=[]):
         self.zlib_d = zlib.decompressobj()
         self.zlib_c = zlib.compressobj()
+        self.root = root
         self.plugins = plugins  # registered plugins
         self.triggers = triggers  # two-tuple mapping regex->plugin_function
         self.logger = logging.getLogger('sirious.%s' % self.__class__.__name__)
@@ -187,7 +189,8 @@ class SiriProxyServer(SiriProxy):
         client.plugins = self.plugins
         client.triggers = self.triggers
         reactor.connectSSL(self.factory.host, self.factory.port, client, ssl.DefaultOpenSSLContextFactory(
-            'keys/server.key', 'keys/server.crt'))
+            os.path.join(self.root, 'ssl', 'server.key'),
+            os.path.join(self.root, 'ssl', 'server.crt')))
 
     def lineReceived(self, line):
         self._lines += 1
@@ -196,7 +199,7 @@ class SiriProxyServer(SiriProxy):
             if method.lower() == 'get':
                 self._serve_ca = True
         if self._serve_ca and not line:
-            crt = file('keys/ca.pem', 'rb').read()
+            crt = file(os.path.join(self.root, 'ssl', 'ca.pem'), 'rb').read()
             headers = {
                 'Content-Type': 'application/x-pem-file',
                 'Content-Length': len(crt),
@@ -215,9 +218,10 @@ class SiriProxyServer(SiriProxy):
 class SiriProxyFactory(protocol.Factory):
     protocol = SiriProxyServer
 
-    def __init__(self, plugins):
+    def __init__(self, root, plugins=[]):
         self.host = '17.174.4.4'
         self.port = 443
+        self.root = root
         self.plugins = []
         for mod_name, cls_name, kwargs in plugins:
             __import__(mod_name)
