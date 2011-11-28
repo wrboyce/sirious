@@ -5,6 +5,7 @@ from sirious import SiriObjects
 
 class SiriPlugin(object):
     proxy = None
+    logger = None
 
     def respond(self, text, speakableText=None, dialogueIdentifier='Misc#ident', listenAfterSpeaking=False):
         self.proxy.blocking = True

@@ -1,4 +1,6 @@
 from binascii import hexlify, unhexlify
+import logging
+import pprint
 import re
 import sys
 import zlib
@@ -21,6 +23,7 @@ class SiriProxy(LineReceiver):
         self.zlib_c = zlib.compressobj()
         self.plugins = plugins  # registered plugins
         self.triggers = triggers  # two-tuple mapping regex->plugin_function
+        self.logger = logging.getLogger('sirious.%s' % self.__class__.__name__)
 
     def setPeer(self, peer):
         self.peer = peer
@@ -30,7 +33,7 @@ class SiriProxy(LineReceiver):
             @todo parse X-Ace-Host: header
         """
         direction = '>' if self.__class__ == SiriProxyServer else '<'
-        print direction, line
+        self.logger.debug("%s %s" % (direction, line))
         self.peer.sendLine(line)
         if not line:
             self.setRawMode()
@@ -78,7 +81,8 @@ class SiriProxy(LineReceiver):
                 plist = readPlistFromString(body)
                 ## and have the server/client process it
                 direction = '>' if self.__class__ == SiriProxyServer else '<'
-                print direction, plist['class'], plist.get('refId', '')
+                self.logger.info("%s %s %s" % (direction, plist['class'], plist.get('refId', '')))
+                self.logger.debug("%s" % pprint.pformat(plist))
                 plist = self.process_plist(plist)
                 if plist:
                     ## Stop blocking if it's a new session
@@ -88,20 +92,18 @@ class SiriProxy(LineReceiver):
                     if not self.blocking or plist['class'] == 'SpeechRecognized':
                         self.inject_plist(plist)
                     else:
-                        print "!", plist['class'], plist.get('refId', '')
+                        self.logger.info("! %s %s" % (plist['class'], plist.get('refId', '')))
                     if plist['class'] == 'SpeechRecognized':
                         self.process_speech(plist)
                 else:
-                    print "!", plist['class'], plist.get('refId', '')
+                    self.logger.info("! %s %s" % (plist['class'], plist.get('refId', '')))
 
     def process_plist(self, plist):
         """ Primarily used for logging and to call the appropriate client/server methods. """
-        #from pprint import pprint
-        #pprint(plist)
-        #print
         ## Offer plugins a chance to intercept/modify plists early on
         for plugin in self.plugins:
             plugin.proxy = self
+            plugin.logger = logging.getLogger('sirious.plugins.%s' % plugin.__class__.__name__)
             if self.__class__ == SiriProxyServer:
                 plist = plugin.plist_from_client(plist)
             if self.__class__ == SiriProxyClient:
@@ -141,7 +143,7 @@ class SiriProxy(LineReceiver):
                 if not token['properties']['removeSpaceAfter']:
                     phrase += ' '
         if phrase:
-            print '[Speech Recognised (%s)] "%s"' % (plist['class'], phrase)
+            self.logger.info('[Speech Recognised] "%s"' % phrase)
             try:
                 dispatcher.getAllReceivers(signal='consume_phrase').next()
                 dispatcher.send('consume_phrase', phrase=phrase, plist=plist)
