@@ -8,17 +8,17 @@ class SiriousTest(SiriPlugin):
     respond_test.triggers = ['Are you serious']
 
     def ask_test(self, phrase):
-        self.ask(self.ask_test_response, "Do you think this is a test?")
-    ask_test.triggers = ['Is this a test']
-
-    def ask_test_handler(self, phrase):
+        self.logger.info('Asking question...')
+        response = self.ask("Do you think this is a test?")
+        self.logger.info('Got answer: %s' % response)
         self.respond("Well, you've failed.")
         self.complete()
+    ask_test.triggers = ['Is this a test']
 
     def confirm_test(self, phrase):
-        self.confirm(self.confirm_test_handler, "Please confirm")
-    confirm_test.triggers = ['Do something']
-
-    def confirm_test_handler(self, confirmed, phrase):
-        self.respond('Confirmed.' if confirmed else 'OK, cancelled.')
+        if self.confirm("Please confirm"):
+            self.respond("Confirmed.")
+        else:
+            self.respond("Ok, cancelled.")
         self.complete()
+    confirm_test.triggers = ['Do something']

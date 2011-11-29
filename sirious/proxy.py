@@ -7,8 +7,7 @@ import sys
 import zlib
 
 from biplist import readPlistFromString, writePlistToString
-from pydispatch import dispatcher
-from twisted.internet import protocol, reactor, ssl
+from twisted.internet import protocol, reactor, ssl, threads
 from twisted.protocols.basic import LineReceiver
 from twisted.protocols.portforward import ProxyClientFactory
 
@@ -19,6 +18,7 @@ class SiriProxy(LineReceiver, object):
     blocking = False
     ref_id = None  # last refId seen
     ace_host = None  # The X-Ace-Host of the current user
+    consumer = None
 
     def __init__(self, plugins=[], triggers=[]):
         self.zlib_d = zlib.decompressobj()
@@ -142,6 +142,9 @@ class SiriProxy(LineReceiver, object):
             self.peer.transport.write(data)
             self.peer.transport.write(self.zlib_c.flush(zlib.Z_FULL_FLUSH))
 
+    def get_next_phrase(self, consumer):
+        self.consumer = consumer
+
     def process_speech(self, plist):
         phrase = ''
         for phrase_plist in plist['properties']['recognition']['properties']['phrases']:
@@ -153,11 +156,11 @@ class SiriProxy(LineReceiver, object):
                     phrase += ' '
         if phrase:
             self.logger.info('[Speech Recognised] "%s"' % phrase)
-            try:
-                dispatcher.getAllReceivers(signal='consume_phrase').next()
-                self.logger.debug('Dispatching `consume_phrase` signal')
-                dispatcher.send('consume_phrase', phrase=phrase)
-            except StopIteration:
+            if self.consumer:
+                self.logger.info("Sending phrase to consumer")
+                self.consumer(phrase)
+                self.consumer = None
+            else:
                 for trigger, function in self.triggers:
                     match = trigger.search(phrase)
                     if match:
@@ -167,7 +170,7 @@ class SiriProxy(LineReceiver, object):
                         args = [phrase]
                         if groups:
                             args.append(groups)
-                        function(*args)
+                        threads.deferToThread(function, *args)
 
     def connectionLost(self, reason):
         """ Reset ref_id and disconnect peer """

@@ -1,5 +1,3 @@
-from pydispatch import dispatcher
-
 from sirious import SiriObjects
 
 
@@ -32,46 +30,45 @@ class SiriPlugin(object):
         root.views.append(SiriObjects.Utterance(text=text, speakableText=speakableText, dialogueIdentifier=dialogueIdentifier, listenAfterSpeaking=listenAfterSpeaking))
         self.send_object(root)
 
-    def ask(self, handler, text, speakableText=None, dialogueIdentifier='Misc#ident', handler_kwargs={}):
+    def ask(self, text, speakableText=None, dialogueIdentifier='Misc#ident'):
         """ Respond with an `Utterance` and send the response to `handler`. """
         root = SiriObjects.AddViews()
         root.views.append(SiriObjects.Utterance(text=text, speakableText=speakableText, dialogueIdentifier=dialogueIdentifier, listenAfterSpeaking=True))
         root.make_root(ref_id=self.proxy.ref_id)
-        self.ask_views(handler, root, handler_kwargs)
+        return self.ask_views(root)
 
-    def ask_views(self, handler, views, handler_kwargs={}):
+    def get_next_phrase(self):
+        def _handler(phrase):
+            self.__response = phrase
+        self.proxy.get_next_phrase(_handler)
+
+    def ask_views(self, views):
         """ Underlying power behind `SiriPlugin.ask` to send request and register for response. """
         self.block_session()
         self.send_object(views)
-        def handle_answer(*a, **kw):
-            del(kw['sender'])
-            del(kw['signal'])
-            handler_kwargs.update(kw)
-            handler(*a, **handler_kwargs)
-            dispatcher.disconnect(handle_answer, signal='consume_phrase')
-        dispatcher.connect(handle_answer, signal='consume_phrase')
+        self.__response = None
+        self.get_next_phrase()
+        while self.__response is None:
+            pass
+        response, self.__response = self.__response, None
+        return response
 
-    def confirm(self, handler, text, speakableText=None, dialogueIdentifier='Misc#ident', handler_kwargs={}):
+    def confirm(self, text, speakableText=None, dialogueIdentifier='Misc#ident'):
         root = SiriObjects.AddViews()
         root.views.append(SiriObjects.Utterance(text=text, speakableText=speakableText, dialogueIdentifier=dialogueIdentifier, listenAfterSpeaking=True))
         root.make_root(ref_id=self.proxy.ref_id)
-        self.confirm_views(handler, root, handler_kwargs)
+        return self.confirm_views(root)
 
-    def confirm_views(self, handler, views, handler_kwargs={}):
-        """ Wrapper around `SiriPlugin.ask` which handles yes/no responses. """
-        def handle_confirm(phrase, **kwargs):
-            phrase = phrase.lower().strip()
-            print 'confirm: "%s"' % phrase
-            confirmed = None
-            if phrase in ['yes', 'ok']:
-                confirmed = True
-            elif phrase in ['no', 'cancel']:
-                confirmed = False
-            if confirmed is None:
-                self.confirm(handler, "Please respond yes or no.", views, handler_kwargs)
-            else:
-                handler(confirmed, phrase, **kwargs)
-        self.ask_views(handle_confirm, views, handler_kwargs)
+    def confirm_views(self, views):
+        return self._confirm(self.ask_views(views))
+
+    def _confirm(self, phrase):
+        phrase = phrase.lower().strip()
+        if phrase in ['yes', 'ok']:
+            return True
+        elif phrase in ['no', 'cancel']:
+            return False
+        return self.confirm("Please respond yes or no.")
 
     def complete(self):
         """ Sends a `RequestCompleted` response. """
