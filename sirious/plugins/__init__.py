@@ -26,12 +26,15 @@ class SiriPlugin(object):
         dispatcher.connect(handle_answer, signal='consume_phrase')
 
     def complete(self):
+        """ Sends a `RequestCompleted` response. """
         request_complete = SiriObjects.RequestCompleted()
         request_complete.make_root(self.proxy.ref_id)
         self.proxy.inject_plist(request_complete.to_dict())
 
     def plist_from_server(self, plist):
+        """ Called when a plist is received from guzzoni, prior to processing. """
         return plist
 
     def plist_from_client(self, plist):
+        """ Called when a plist is received from an iPhone, prior to processing. """
         return plist

@@ -13,11 +13,12 @@ from twisted.protocols.basic import LineReceiver
 from twisted.protocols.portforward import ProxyClientFactory
 
 
-class SiriProxy(LineReceiver):
+class SiriProxy(LineReceiver, object):
     """ Base class for the SiriProxy - performs the majority of the siri protocol and sirious plugin handling. """
     peer = None  # the other end! (self.peer.peer == self)
     blocking = False
     ref_id = None  # last refId seen
+    ace_host = None  # The X-Ace-Host of the current user
 
     def __init__(self, plugins=[], triggers=[]):
         self.zlib_d = zlib.decompressobj()
@@ -30,12 +31,18 @@ class SiriProxy(LineReceiver):
         self.peer = peer
 
     def lineReceived(self, line):
-        """ Handles simple HTML-style headers
+        """ Handles simple HTTP-style headers
             @todo parse X-Ace-Host: header
         """
         direction = '>' if self.__class__ == SiriProxyServer else '<'
         self.logger.debug("%s %s" % (direction, line))
         self.peer.sendLine(line)
+        try:
+            key, val = line.split(':')
+            if key.strip() == 'X-Ace-Host':
+                self.ace_host = self.peer.ace_host = val.strip()
+        except ValueError:
+            pass
         if not line:
             self.setRawMode()
 
@@ -100,18 +107,13 @@ class SiriProxy(LineReceiver):
                     self.logger.info("! %s %s" % (plist['class'], plist.get('refId', '')))
 
     def process_plist(self, plist):
-        """ Primarily used for logging and to call the appropriate client/server methods. """
         ## Offer plugins a chance to intercept/modify plists early on
+        fname = 'plist_from_%s' % ('client' if self.__class__ == SiriProxyServer else 'server')
         for plugin in self.plugins:
-            plugin.proxy = self
-            plugin.logger = logging.getLogger('sirious.plugins.%s' % plugin.__class__.__name__)
-            if self.__class__ == SiriProxyServer:
-                plist = plugin.plist_from_client(plist)
-            if self.__class__ == SiriProxyClient:
-                plist = plugin.plist_from_server(plist)
-            ## If a plugin returns None, the plist has been blocked
+            plist = getattr(plugin, fname)(plist)
             if not plist:
-                return
+                self.logger.info('plist blocked by plugin %s' % (plugin.__class__.__name__))
+                return  # If a plugin returns None, the plist has been blocked
         return plist
 
     def inject_plist(self, plist):
@@ -122,6 +124,7 @@ class SiriProxy(LineReceiver):
                 * the size is measured and the appropriate 02... header generated
                 * header and body are concatenated, compressed, and injected.
         """
+        self.logger.info("* %s %s" % (plist['class'], plist.get('refId', '')))
         ref_id = plist.get('refId', None)
         if ref_id:
             self.ref_id = ref_id
@@ -147,11 +150,14 @@ class SiriProxy(LineReceiver):
             self.logger.info('[Speech Recognised] "%s"' % phrase)
             try:
                 dispatcher.getAllReceivers(signal='consume_phrase').next()
+                self.logger.debug('Dispatching `consume_phrase` signal')
                 dispatcher.send('consume_phrase', phrase=phrase, plist=plist)
             except StopIteration:
                 for trigger, function in self.triggers:
                     match = trigger.search(phrase)
                     if match:
+                        fname = '%s.%s' % (function.im_class.__name__, function.__func__.__name__)
+                        self.logger.info('Phrase matched "%s" for trigger %s' % (trigger.pattern, fname))
                         groups = match.groups()
                         args = [phrase, plist]
                         if groups:
@@ -160,6 +166,7 @@ class SiriProxy(LineReceiver):
 
     def connectionLost(self, reason):
         """ Reset ref_id and disconnect peer """
+        self.logger.info('Connection lost')
         self.ref_id = None
         if self.peer:
             self.peer.transport.loseConnection()
@@ -168,7 +175,10 @@ class SiriProxy(LineReceiver):
 
 class SiriProxyClient(SiriProxy):
     def connectionMade(self):
+        self.logger.info('Connected to server')
         self.peer.setPeer(self)
+        for plugin in self.plugins:
+            plugin.proxy = self
         self.peer.transport.resumeProducing()
 
 
@@ -183,11 +193,14 @@ class SiriProxyServer(SiriProxy):
     clientProtocolFactory = SiriProxyClientFactory
 
     def connectionMade(self):
+        self.logger.info('Connect from client')
         self.transport.pauseProducing()
+        self.logger.info('Building %s' % self.clientProtocolFactory.__name__)
         client = self.clientProtocolFactory()
         client.setServer(self)
         client.plugins = self.plugins
         client.triggers = self.triggers
+        self.logger.info('Connecting to %s:%s with %s' % (self.factory.host, self.factory.port, client.__class__.__name__))
         reactor.connectSSL(self.factory.host, self.factory.port, client, ssl.ClientContextFactory())
 
     def lineReceived(self, line):
@@ -195,8 +208,10 @@ class SiriProxyServer(SiriProxy):
         if self._lines == 1:
             method, path, _ver = line.split(' ')
             if method.lower() == 'get':
+                self.logger.info('GET Request - blocking request')
                 self._serve_ca = True
         if self._serve_ca and not line:
+            self.logger.info('Serving CA Certificate')
             crt = file(os.path.join(self.root, 'ssl', 'ca.pem'), 'rb').read()
             headers = {
                 'Content-Type': 'application/x-pem-file',
@@ -221,7 +236,9 @@ class SiriProxyFactory(protocol.Factory):
         self.port = 443
         self.root = root
         self.plugins = []
+        self.logger = logging.getLogger('sirious.%s' % self.__class__.__name__)
         for mod_name, cls_name, kwargs in plugins:
+            self.logger.info("Loading plugin %s.%s" % (mod_name, cls_name))
             __import__(mod_name)
             mod = sys.modules[mod_name]
             self.plugins.append((getattr(mod, cls_name), kwargs))
@@ -233,13 +250,17 @@ class SiriProxyFactory(protocol.Factory):
                 yield attr
 
     def buildProtocol(self, addr):
+        self.logger.info('Building %s' % self.protocol.__name__)
         protocol = self.protocol()
         protocol.root = self.root
         for cls, plugin_kwargs in self.plugins:
+            self.logger.debug('Instantiating plugin %s' % cls)
             instance = cls(**plugin_kwargs)
+            instance.logger = logging.getLogger('sirious.plugins.%s' % instance.__class__.__name__)
             protocol.plugins.append(instance)
             for function in self._get_plugin_triggers(instance):
                 for trigger in function.triggers:
+                    self.logger.info('Registering pluggin trigger "%s" -> %s.%s' % (trigger, instance.__class__.__name__, function.__func__.__name__))
                     trigger_re = re.compile(trigger, re.I)
                     protocol.triggers.append((trigger_re, function))
         protocol.factory = self

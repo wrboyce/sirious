@@ -35,6 +35,7 @@ def start_proxy():
         core_settings = {}
     settings = {}
     settings['root'] = root = cfg_dirs[0]  # ${VIRTUAL_ENV}/.sirious or ~/.sirious
+    logging.getLogger('sirious').info('Got root %s' % root)
     ## Configure logging
     try:
         loglevel_name = core_settings['loglevel']
