@@ -12,7 +12,7 @@ class SiriPlugin(object):
         root = SiriObjects.AddViews()
         root.make_root(ref_id=self.proxy.ref_id)
         root.views.append(SiriObjects.Utterance(text=text, speakableText=speakableText, dialogueIdentifier=dialogueIdentifier, listenAfterSpeaking=listenAfterSpeaking))
-        self.proxy.inject_plist(root.to_dict())
+        self.proxy.inject_plist(root)
 
     def ask(self, handler, text, speakableText=None, dialogueIdentifier='Misc#ident', handler_kwargs={}):
         self.respond(text, speakableText, dialogueIdentifier, listenAfterSpeaking=True)
@@ -29,7 +29,7 @@ class SiriPlugin(object):
         """ Sends a `RequestCompleted` response. """
         request_complete = SiriObjects.RequestCompleted()
         request_complete.make_root(self.proxy.ref_id)
-        self.proxy.inject_plist(request_complete.to_dict())
+        self.proxy.inject_plist(request_complete)
 
     def plist_from_server(self, plist):
         """ Called when a plist is received from guzzoni, prior to processing. """

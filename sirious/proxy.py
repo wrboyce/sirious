@@ -124,6 +124,11 @@ class SiriProxy(LineReceiver, object):
                 * the size is measured and the appropriate 02... header generated
                 * header and body are concatenated, compressed, and injected.
         """
+        if hasattr(plist, 'to_dict'):
+            plist = plist.to_dict()
+        if not isinstance(plist, dict):
+            self.logger.warning('Rejecting inject invalid plist data %s' % plist)
+            return
         self.logger.info("* %s %s" % (plist['class'], plist.get('refId', '')))
         ref_id = plist.get('refId', None)
         if ref_id:
