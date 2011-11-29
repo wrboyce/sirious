@@ -4,19 +4,37 @@ from sirious import SiriObjects
 
 
 class SiriPlugin(object):
+    """ Abstract Plugin Class """
     proxy = None
     logger = None
 
-    def respond(self, text, speakableText=None, dialogueIdentifier='Misc#ident', listenAfterSpeaking=False):
+    def block_session(self):
+        """ Have the proxy block any further packets from the peer. """
         self.proxy.blocking = True
+
+    def send_object(self, plist):
+        """ Inject an object into the conversation. """
+        self.proxy.inject_plist(plist)
+
+    def respond(self, text, speakableText=None, dialogueIdentifier='Misc#ident', listenAfterSpeaking=False):
+        """ Respond with a simple `Utterance` """
+        self.block_session()
         root = SiriObjects.AddViews()
         root.make_root(ref_id=self.proxy.ref_id)
         root.views.append(SiriObjects.Utterance(text=text, speakableText=speakableText, dialogueIdentifier=dialogueIdentifier, listenAfterSpeaking=listenAfterSpeaking))
-        self.proxy.inject_plist(root)
+        self.send_object(root)
 
     def ask(self, handler, text, speakableText=None, dialogueIdentifier='Misc#ident', handler_kwargs={}):
-        self.respond(text, speakableText, dialogueIdentifier, listenAfterSpeaking=True)
-        self.proxy.blocking = True
+        """ Respond with an `Utterance` and send the response to `handler`. """
+        root = SiriObjects.AddViews()
+        root.views.append(SiriObjects.Utterance(text=text, speakableText=speakableText, dialogueIdentifier=dialogueIdentifier, listenAfterSpeaking=True))
+        root.make_root(ref_id=self.proxy.ref_id)
+        self.ask_views(handler, root, handler_kwargs)
+
+    def ask_views(self, handler, views, handler_kwargs={}):
+        """ Underlying power behind `SiriPlugin.ask` to send request and register for response. """
+        self.block_session()
+        self.send_object(views)
         def handle_answer(*a, **kw):
             del(kw['sender'])
             del(kw['signal'])
@@ -29,7 +47,7 @@ class SiriPlugin(object):
         """ Sends a `RequestCompleted` response. """
         request_complete = SiriObjects.RequestCompleted()
         request_complete.make_root(self.proxy.ref_id)
-        self.proxy.inject_plist(request_complete)
+        self.send_object(request_complete)
 
     def plist_from_server(self, plist):
         """ Called when a plist is received from guzzoni, prior to processing. """
