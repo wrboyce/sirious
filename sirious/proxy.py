@@ -156,7 +156,7 @@ class SiriProxy(LineReceiver, object):
             try:
                 dispatcher.getAllReceivers(signal='consume_phrase').next()
                 self.logger.debug('Dispatching `consume_phrase` signal')
-                dispatcher.send('consume_phrase', phrase=phrase, plist=plist)
+                dispatcher.send('consume_phrase', phrase=phrase)
             except StopIteration:
                 for trigger, function in self.triggers:
                     match = trigger.search(phrase)
@@ -164,7 +164,7 @@ class SiriProxy(LineReceiver, object):
                         fname = '%s.%s' % (function.im_class.__name__, function.__func__.__name__)
                         self.logger.info('Phrase matched "%s" for trigger %s' % (trigger.pattern, fname))
                         groups = match.groups()
-                        args = [phrase, plist]
+                        args = [phrase]
                         if groups:
                             args.append(groups)
                         function(*args)
@@ -265,7 +265,7 @@ class SiriProxyFactory(protocol.Factory):
             protocol.plugins.append(instance)
             for function in self._get_plugin_triggers(instance):
                 for trigger in function.triggers:
-                    self.logger.info('Registering pluggin trigger "%s" -> %s.%s' % (trigger, instance.__class__.__name__, function.__func__.__name__))
+                    self.logger.info('Registering plugin trigger "%s" -> %s.%s' % (trigger, instance.__class__.__name__, function.__func__.__name__))
                     trigger_re = re.compile(trigger, re.I)
                     protocol.triggers.append((trigger_re, function))
         protocol.factory = self

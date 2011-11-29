@@ -8,6 +8,14 @@ class SiriPlugin(object):
     proxy = None
     logger = None
 
+    def plist_from_server(self, plist):
+        """ Called when a plist is received from guzzoni, prior to processing. """
+        return plist
+
+    def plist_from_client(self, plist):
+        """ Called when a plist is received from an iPhone, prior to processing. """
+        return plist
+
     def block_session(self):
         """ Have the proxy block any further packets from the peer. """
         self.proxy.blocking = True
@@ -51,7 +59,7 @@ class SiriPlugin(object):
 
     def confirm_views(self, handler, views, handler_kwargs={}):
         """ Wrapper around `SiriPlugin.ask` which handles yes/no responses. """
-        def handle_confirm(phrase, plist, **kwargs):
+        def handle_confirm(phrase, **kwargs):
             phrase = phrase.lower().strip()
             print 'confirm: "%s"' % phrase
             confirmed = None
@@ -62,7 +70,7 @@ class SiriPlugin(object):
             if confirmed is None:
                 self.confirm(handler, "Please respond yes or no.", views, handler_kwargs)
             else:
-                handler(confirmed, phrase, plist, **kwargs)
+                handler(confirmed, phrase, **kwargs)
         self.ask_views(handle_confirm, views, handler_kwargs)
 
     def complete(self):
@@ -70,11 +78,3 @@ class SiriPlugin(object):
         request_complete = SiriObjects.RequestCompleted()
         request_complete.make_root(self.proxy.ref_id)
         self.send_object(request_complete)
-
-    def plist_from_server(self, plist):
-        """ Called when a plist is received from guzzoni, prior to processing. """
-        return plist
-
-    def plist_from_client(self, plist):
-        """ Called when a plist is received from an iPhone, prior to processing. """
-        return plist
