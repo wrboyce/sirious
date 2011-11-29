@@ -27,15 +27,12 @@ def start_proxy():
     config = ConfigParser.RawConfigParser()
     cfg_dirs = get_paths()
     for dir in cfg_dirs[::-1]:  # Cfg files are parsed in the order /etc/sirious/sirious.cfg, ~/.sirious/sirious.cfg, ${VIRTUAL_ENV}/.sirious/sirious.cfg
-        config.read('sirious.cfg')
+        config.read(os.path.join(dir, 'sirious.cfg'))
     ## Grab core settings
     try:
         core_settings = config.items('core')
     except ConfigParser.NoSectionError:
         core_settings = {}
-    settings = {}
-    settings['root'] = root = cfg_dirs[0]  # ${VIRTUAL_ENV}/.sirious or ~/.sirious
-    logging.getLogger('sirious').info('Got root %s' % root)
     ## Configure logging
     try:
         loglevel_name = core_settings['loglevel']
@@ -46,16 +43,23 @@ def start_proxy():
         logging.basicConfig(
             format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
             level=loglevel)
+    ## Global configuration
+    settings = {}
+    settings['root'] = root = cfg_dirs[0]  # ${VIRTUAL_ENV}/.sirious or ~/.sirious
+    logging.getLogger('sirious').info('Got root %s' % root)
     ## Configure plugins
     plugins = []
-    for plugin, cls in config.items('plugins'):
-        logging.getLogger('sirious').info('Registering plugin %s.%s...' % (plugin, cls))
-        try:
-            kwargs = dict(config.items(cls))
-        except ConfigParser.NoSectionError:
-            kwargs = {}
-        plugins.append((plugin, cls, kwargs))
-    settings['plugins'] = plugins
+    try:
+        for plugin, cls in config.items('plugins'):
+            logging.getLogger('sirious').info('Registering plugin %s.%s...' % (plugin, cls))
+            try:
+                kwargs = dict(config.items(cls))
+            except ConfigParser.NoSectionError:
+                kwargs = {}
+            plugins.append((plugin, cls, kwargs))
+        settings['plugins'] = plugins
+    except ConfigParser.NoSectionError:
+        pass
     ## Start the Proxy
     logging.getLogger('sirious').info('Starting up...')
     reactor.listenSSL(443, SiriProxyFactory(**settings),
