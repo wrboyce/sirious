@@ -31,23 +31,24 @@ class SiriPlugin(object):
         self.send_object(root)
 
     def ask(self, text, speakableText=None, dialogueIdentifier='Misc#ident'):
-        """ Respond with an `Utterance` and send the response to `handler`. """
+        """ Respond with an `Utterance` and return the response. """
         root = SiriObjects.AddViews()
         root.views.append(SiriObjects.Utterance(text=text, speakableText=speakableText, dialogueIdentifier=dialogueIdentifier, listenAfterSpeaking=True))
         root.make_root(ref_id=self.proxy.ref_id)
         return self.ask_views(root)
 
-    def get_next_phrase(self):
-        def _handler(phrase):
-            self.__response = phrase
-        self.proxy.get_next_phrase(_handler)
-
     def ask_views(self, views):
         """ Underlying power behind `SiriPlugin.ask` to send request and register for response. """
         self.block_session()
         self.send_object(views)
+        return self._get_next_phrase()
+
+    def _get_next_phrase(self):
+        """ Internal function to register as the phrase consumer with the proxy and return next phrase. """
         self.__response = None
-        self.get_next_phrase()
+        def _handler(phrase):
+            self.__response = phrase
+        self.proxy.get_next_phrase(_handler)
         while self.__response is None:
             pass
         response, self.__response = self.__response, None
@@ -60,10 +61,8 @@ class SiriPlugin(object):
         return self.confirm_views(root)
 
     def confirm_views(self, views):
-        return self._confirm(self.ask_views(views))
-
-    def _confirm(self, phrase):
-        phrase = phrase.lower().strip()
+        """ Wrapper around `SiriPlugin.ask` to parse a yes/no response and return a bool. """
+        phrase = self.ask_views(views).lower().strip()
         if phrase in ['yes', 'ok']:
             return True
         elif phrase in ['no', 'cancel']:
