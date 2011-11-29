@@ -5,8 +5,8 @@ from sirious import SiriPlugin
 
 
 class LFCFixtures(SiriPlugin):
-    def get_next_game(self, phrase, plist):
-        location = 'H' if 'home' in phrase.lower() else 'A'
+    def get_next_game(self, phrase, match_groups):
+        location = 'H' if match_groups[0].lower() == 'home' else 'A'
         url = "http://www.liverpoolfc.tv/match/fixtures"
         root = lxml.html.parse(url)
         fixtable = CSSSelector('table.fixtures')(root)[0]
@@ -17,4 +17,5 @@ class LFCFixtures(SiriPlugin):
                 break
         response = "The next %s game is %s at %s on %s." % ("home" if location is 'H' else "away", team, time, date)
         self.respond(response)
+        self.complete()
     get_next_game.triggers = ['next (home|away) game']
