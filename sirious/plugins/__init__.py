@@ -43,6 +43,28 @@ class SiriPlugin(object):
             dispatcher.disconnect(handle_answer, signal='consume_phrase')
         dispatcher.connect(handle_answer, signal='consume_phrase')
 
+    def confirm(self, handler, text, speakableText=None, dialogueIdentifier='Misc#ident', handler_kwargs={}):
+        root = SiriObjects.AddViews()
+        root.views.append(SiriObjects.Utterance(text=text, speakableText=speakableText, dialogueIdentifier=dialogueIdentifier, listenAfterSpeaking=True))
+        root.make_root(ref_id=self.proxy.ref_id)
+        self.confirm_views(handler, root, handler_kwargs)
+
+    def confirm_views(self, handler, views, handler_kwargs={}):
+        """ Wrapper around `SiriPlugin.ask` which handles yes/no responses. """
+        def handle_confirm(phrase, plist, **kwargs):
+            phrase = phrase.lower().strip()
+            print 'confirm: "%s"' % phrase
+            confirmed = None
+            if phrase in ['yes', 'ok']:
+                confirmed = True
+            elif phrase in ['no', 'cancel']:
+                confirmed = False
+            if confirmed is None:
+                self.confirm(handler, "Please respond yes or no.", views, handler_kwargs)
+            else:
+                handler(confirmed, phrase, plist, **kwargs)
+        self.ask_views(handle_confirm, views, handler_kwargs)
+
     def complete(self):
         """ Sends a `RequestCompleted` response. """
         request_complete = SiriObjects.RequestCompleted()
