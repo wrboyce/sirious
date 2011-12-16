@@ -137,8 +137,9 @@ class SiriProxy(LineReceiver, object):
         data_len = len(data)
         if data_len > 0:
             ## Add data_len to 0x200000000 and convert to hex, zero-padded to 10 digits
-            header = '{:x}'.format(0x0200000000 + data_len).rjust(10, '0')
-            data = self.zlib_c.compress(unhexlify(header) + data)
+            #header = '{:x}'.format(0x0200000000 + data_len).rjust(10, '0')
+            header = '%x' % (0x0200000000 + data_len)       
+            data = self.zlib_c.compress(unhexlify(header.rjust(10,'0')) + data)
             self.peer.transport.write(data)
             self.peer.transport.write(self.zlib_c.flush(zlib.Z_FULL_FLUSH))
 
