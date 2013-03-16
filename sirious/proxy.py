@@ -6,7 +6,7 @@ import re
 import sys
 import zlib
 
-from biplist import readPlistFromString, writePlistToString
+from biplist import readPlistFromString, writePlistToString, InvalidPlistException
 from twisted.internet import protocol, reactor, ssl, threads
 from twisted.protocols.basic import LineReceiver
 from twisted.protocols.portforward import ProxyClientFactory
@@ -75,7 +75,11 @@ class SiriProxy(LineReceiver, object):
             self.peer.transport.write(data[0:4])
             data = data[4:]
         ## Add `data` to decompress stream
-        udata = self.zlib_d.decompress(data)
+        try:
+            udata = self.zlib_d.decompress(data)
+        except zlib.error:
+            self.logger.warning("Got non-zlib data from: {}".format(data.strip()))
+            return
         if udata:
             ## If we get decompressed output, process it
             header = hexlify(udata[0:5])
@@ -85,10 +89,14 @@ class SiriProxy(LineReceiver, object):
             size = int(header[2:], 16)
             body = udata[5:(size + 5)]
             if body:
-                ## Parse the plist data
-                plist = readPlistFromString(body)
-                ## and have the server/client process it
                 direction = '>' if self.__class__ == SiriProxyServer else '<'
+                ## Parse the plist data
+                try:
+                    plist = readPlistFromString(body)
+                except InvalidPlistException:
+                    self.logger.warning("{} Invalid Plist!".format(direction))
+                    return
+                ## and have the server/client process it
                 self.logger.info("%s %s %s" % (direction, plist['class'], plist.get('refId', '')))
                 self.logger.debug("%s" % pprint.pformat(plist))
                 plist = self.process_plist(plist)
